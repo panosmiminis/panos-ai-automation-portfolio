@@ -1,0 +1,114 @@
+LLM_API_KEY=your_api_key_here
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL=gpt-4o-mini
+
+import json
+import os
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+
+SYSTEM_PROMPT = """
+You are an AI email assistant. Analyze the email and return valid JSON with:
+summary, priority, intent, action_items, suggested_reply.
+Keep the suggested reply professional and concise.
+""".strip()
+
+
+def call_llm(email_text: str) -> dict:
+    load_dotenv()
+    api_key = os.getenv("LLM_API_KEY")
+    api_url = os.getenv("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    if not api_key or api_key == "your_api_key_here":
+        return demo_response(email_text)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": email_text},
+        ],
+        "temperature": 0.2,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"raw_llm_response": content}
+
+
+def demo_response(email_text: str) -> dict:
+    return {
+        "summary": "The sender is interested in discussing AI automations for handling customer requests faster.",
+        "priority": "Medium",
+        "intent": "Schedule a short call to discuss possible automation solutions.",
+        "action_items": [
+            "Reply with availability for a short call.",
+            "Ask what tools or customer request channels they currently use."
+        ],
+        "suggested_reply": (
+            "Hello Maria,\n\nThank you for reaching out. I would be happy to discuss how AI automations "
+            "could help your business handle customer requests more efficiently. Please let me know what times "
+            "work best for you this week for a short call.\n\nBest regards,\nPanagiotis"
+        ),
+    }
+
+
+def main() -> None:
+    email_path = Path("sample_email.txt")
+    email_text = email_path.read_text(encoding="utf-8")
+    result = call_llm(email_text)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
+
+# AI Email Assistant with LLM API
+
+## Description
+A Python-based AI assistant that analyzes an email, summarizes the message, detects priority, identifies the sender's intent, and drafts a professional reply.
+
+## Features
+- Email summarization
+- Priority detection
+- Intent recognition
+- Suggested professional reply
+- JSON-style structured output
+- Works with a real LLM API or local fallback output for demo purposes
+
+## Why this project matters
+This project demonstrates how AI can support productivity workflows by reducing the time needed to understand and respond to emails.
+
+## How to run
+From the repository root:
+
+```bash
+pip install -r requirements.txt
+cd 01-ai-email-assistant
+cp .env.example .env
+python main.py
+```
+
+Add your API key to `.env` if you want real LLM output. Without an API key, the script returns a demo response so the project can still be reviewed.
+
+## Example use case
+A freelancer, student, or business owner can use this assistant to quickly understand incoming messages and prepare professional responses.
+
+Subject: Meeting request for automation project
+
+Hello Panagiotis,
+
+We are interested in learning more about how AI automations could help our small business handle incoming customer requests faster. Could we schedule a short call this week to discuss possible solutions?
+
+Best regards,
+Maria
