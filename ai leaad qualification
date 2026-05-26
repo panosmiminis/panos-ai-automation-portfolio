@@ -1,0 +1,136 @@
+LLM_API_KEY=your_api_key_here
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL=gpt-4o-mini
+
+name,company,industry,budget,timeline,need
+Nikos Papadopoulos,Local Gym,Fitness,1200,1 month,Automate membership follow-ups and reminders
+Eleni Georgiou,Real Estate Office,Real Estate,3000,2 weeks,Qualify property leads and draft replies
+George Kostas,Small Cafe,Food Service,300,No timeline,General interest in AI tools
+
+import csv
+import json
+import os
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+
+SYSTEM_PROMPT = """
+You are an AI lead qualification assistant. Return valid JSON with:
+lead_score from 1 to 100, priority as High/Medium/Low, reasoning, suggested_follow_up.
+Be practical and business-focused.
+""".strip()
+
+
+def call_llm(lead: dict) -> dict:
+    load_dotenv()
+    api_key = os.getenv("LLM_API_KEY")
+    api_url = os.getenv("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    if not api_key or api_key == "your_api_key_here":
+        return demo_score(lead)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(lead, ensure_ascii=False)},
+        ],
+        "temperature": 0.2,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"raw_llm_response": content}
+
+
+def demo_score(lead: dict) -> dict:
+    budget = int(lead.get("budget", 0))
+    timeline = lead.get("timeline", "").lower()
+    need = lead.get("need", "")
+
+    score = 40
+    if budget >= 1000:
+        score += 25
+    if "week" in timeline or "month" in timeline:
+        score += 20
+    if len(need) > 30:
+        score += 15
+
+    score = min(score, 100)
+    priority = "High" if score >= 75 else "Medium" if score >= 50 else "Low"
+
+    return {
+        "lead_score": score,
+        "priority": priority,
+        "reasoning": "The score is based on budget, timeline clarity, and how specific the automation need is.",
+        "suggested_follow_up": (
+            f"Hello {lead.get('name')}, thank you for your interest. I would be happy to discuss how an AI automation "
+            f"workflow could help with: {need}. Could we schedule a short call to understand your current process?"
+        ),
+    }
+
+
+def read_leads(path: str = "leads.csv") -> list[dict]:
+    with open(path, newline="", encoding="utf-8") as file:
+        return list(csv.DictReader(file))
+
+
+def main() -> None:
+    leads = read_leads()
+    results = []
+
+    for lead in leads:
+        analysis = call_llm(lead)
+        results.append({"lead": lead, "analysis": analysis})
+
+    output_path = Path("qualified_leads.json")
+    output_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Saved results to {output_path}")
+    print(json.dumps(results, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
+
+# AI Lead Qualification Automation
+
+## Description
+A Python automation tool that reads lead data from a CSV file, evaluates each lead, assigns a score, classifies priority, and suggests a follow-up message.
+
+## Features
+- Reads leads from CSV
+- Scores lead quality
+- Classifies priority
+- Creates suggested follow-up messages
+- Exports results to `qualified_leads.json`
+- Can work with a real LLM API or local fallback logic
+
+## Why this project matters
+Businesses often receive leads from forms, spreadsheets, or messages. This project shows how AI automation can help prioritize the best opportunities and improve response speed.
+
+## How to run
+From the repository root:
+
+```bash
+pip install -r requirements.txt
+cd 02-ai-lead-qualification
+cp .env.example .env
+python main.py
+```
+
+## Output
+The project creates:
+
+```bash
+qualified_leads.json
+```
+
+This file contains the lead score, priority, reasoning, and recommended follow-up.
