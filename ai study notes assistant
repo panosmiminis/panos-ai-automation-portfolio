@@ -1,0 +1,137 @@
+LLM_API_KEY=your_api_key_here
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL=gpt-4o-mini
+
+import json
+import os
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+
+SYSTEM_PROMPT = """
+You are an AI study assistant. Analyze the notes and return valid JSON with:
+summary, key_points, revision_questions, study_plan.
+Make it clear, practical, and useful for a student.
+""".strip()
+
+
+def call_llm(notes: str) -> dict:
+    load_dotenv()
+    api_key = os.getenv("LLM_API_KEY")
+    api_url = os.getenv("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    if not api_key or api_key == "your_api_key_here":
+        return demo_output(notes)
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": notes},
+        ],
+        "temperature": 0.2,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"raw_llm_response": content}
+
+
+def demo_output(notes: str) -> dict:
+    return {
+        "summary": "APIs allow software systems to communicate. They are important in AI automation because they connect LLMs with external tools such as email, spreadsheets, CRMs, and databases.",
+        "key_points": [
+            "APIs connect different software systems.",
+            "Clients send requests and servers return responses.",
+            "REST APIs often exchange JSON data.",
+            "API keys or tokens are commonly used for authentication.",
+            "AI automations use APIs to connect LLMs with real tools."
+        ],
+        "revision_questions": [
+            "What is the purpose of an API?",
+            "What is the difference between a client and a server?",
+            "Why is JSON commonly used in APIs?",
+            "How can APIs be useful in AI automation projects?"
+        ],
+        "study_plan": [
+            "Review the definition of APIs.",
+            "Understand request and response flow.",
+            "Practice reading a simple JSON response.",
+            "Think of one workflow where an LLM connects to an external API."
+        ],
+    }
+
+
+def export_markdown(result: dict, path: str = "study_output.md") -> None:
+    lines = ["# AI Study Output", ""]
+    lines.append("## Summary")
+    lines.append(result.get("summary", ""))
+    lines.append("")
+
+    for section in ["key_points", "revision_questions", "study_plan"]:
+        title = section.replace("_", " ").title()
+        lines.append(f"## {title}")
+        items = result.get(section, [])
+        if isinstance(items, list):
+            for item in items:
+                lines.append(f"- {item}")
+        else:
+            lines.append(str(items))
+        lines.append("")
+
+    Path(path).write_text("\n".join(lines), encoding="utf-8")
+
+
+def main() -> None:
+    notes = Path("notes.txt").read_text(encoding="utf-8")
+    result = call_llm(notes)
+    export_markdown(result)
+    print("Saved study output to study_output.md")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
+
+APIs allow different software systems to communicate with each other. A client sends a request to a server, and the server returns a response. Many modern applications use REST APIs, where data is often exchanged in JSON format. Authentication is commonly handled with API keys or tokens. In AI automation projects, APIs can connect LLMs with external tools such as email platforms, spreadsheets, CRMs, and databases.
+
+# AI Study & Notes Assistant
+
+## Description
+A Python assistant that takes study notes, summarizes them, extracts key points, creates revision questions, and generates a short study plan.
+
+## Features
+- Summarizes study notes
+- Extracts important concepts
+- Creates revision questions
+- Builds a short study plan
+- Exports output to Markdown
+- Works with a real LLM API or local fallback output
+
+## Why this project matters
+This project shows how LLM-based tools can help students organize information, study more efficiently, and transform raw notes into useful learning material.
+
+## How to run
+From the repository root:
+
+```bash
+pip install -r requirements.txt
+cd 03-ai-study-notes-assistant
+cp .env.example .env
+python main.py
+```
+
+## Output
+The project creates:
+
+```bash
+study_output.md
+```
